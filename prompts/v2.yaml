@@ -1,0 +1,10 @@
+version: v2
+timestamp: "2026-10-22T09:00:00Z"
+model: gemini-3.8-flash
+# Simulates a "harmless" rewording that quietly breaks account detection.
+# Only the offline mock provider reads this field.
+mock_profile: degraded
+system_prompt: |
+  Triage this support email. Respond in JSON with "category" (billing, technical, account, general)
+  and a short "summary". Prefer "general" when unsure.
+few_shot: []

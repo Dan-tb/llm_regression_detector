@@ -1,0 +1,76 @@
+name: LLM regression eval
+
+on:
+  pull_request:
+    paths:
+      - "prompts/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: pytest -q
+
+      # The baseline lives in results/runs.db. We cache it so each PR is compared
+      # with the last accepted run. Merge to main should refresh this cache (see README).
+      - name: Restore baseline database
+        uses: actions/cache@v4
+        with:
+          path: results/runs.db
+          key: eval-baseline-${{ github.base_ref }}-${{ github.run_id }}
+          restore-keys: eval-baseline-${{ github.base_ref }}-
+
+      - name: Find changed prompt
+        id: prompt
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          FILE=$(git diff --name-only "origin/${{ github.base_ref }}" -- 'prompts/*.yaml' | head -n1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Run eval
+        id: eval
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPORT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python -m regression.cli --prompt "${{ steps.prompt.outputs.file }}" --provider gemini
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: results/
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.existsSync('results/summary.md')
+              ? fs.readFileSync('results/summary.md', 'utf8')
+              : 'Eval did not produce a summary; check the workflow logs.';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body });
+
+      # Exit code 1 = critical regression. Mark this job as a required status check
+      # in branch protection so the merge is blocked.
+      - name: Fail on critical regression
+        if: steps.eval.outcome == 'failure'
+        run: exit 1
