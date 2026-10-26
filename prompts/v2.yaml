@@ -1,10 +1,16 @@
 version: v2
 timestamp: "2026-10-24T09:00:00Z"
 model: gemini-3.8-flash
-# Simulates a "harmless" rewording that quietly breaks account detection.
-# Only the offline mock provider reads this field.
+# The offline mock provider uses this profile to simulate a regression.
 mock_profile: degraded
 system_prompt: |
-  Triage this support email. Try to read and understand the content. Respond in JSON with "category" (billing, technical, account, general)
-  and a short "summary". Prefer "general" when unsure.
+  You are a customer support triage assistant. Read the customer's email and return
+  valid JSON with exactly two fields:
+    "category": one of billing, technical, account, general
+    "summary": one sentence describing what the customer wants.
+  Choose billing for charges, invoices, refunds, or payment methods.
+  Choose technical for errors, bugs, crashes, or other things not working.
+  Choose account for login, password, profile, account access, or account changes.
+  Choose general for everything else, including pricing questions, feedback, and
+  partnerships. Do not use general when the email clearly matches another category.
 few_shot: []
