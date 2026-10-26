@@ -2,6 +2,8 @@ name: LLM regression eval
 
 on:
   pull_request:
+    branches:
+      - main
     paths:
       - "prompts/**"
 
